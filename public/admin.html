@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>ADMIN — Verifikasi Pembayaran</title>
+<style>
+:root{
+  --paper:#f2ede3;--ink:#111111;--white:#ffffff;--yellow:#ffd23f;--pink:#ff90b3;
+  --cyan:#7ce7f0;--green:#8bf09a;--red:#ff5c5c;
+  --shadow:7px 7px 0 var(--ink);--shadow-sm:4px 4px 0 var(--ink);--border:3px solid var(--ink);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);color:var(--ink);min-height:100dvh;
+  font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  background-image:repeating-linear-gradient(0deg,transparent 0 31px,rgba(17,17,17,.045) 31px 32px);
+}
+.wrap{max-width:900px;margin:0 auto;padding:clamp(16px,4vw,36px)}
+header{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:8px 0 22px}
+h1{margin:0;font:900 clamp(24px,6vw,40px)/1 "Arial Black",Arial,sans-serif;text-transform:uppercase;letter-spacing:-.03em}
+.kicker{display:inline-block;background:var(--ink);color:var(--yellow);padding:3px 8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:11px;margin-bottom:8px}
+.card{background:var(--white);border:var(--border);box-shadow:var(--shadow);padding:clamp(16px,4vw,24px);margin-bottom:22px}
+label{display:block;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 7px}
+input{width:100%;padding:13px 14px;border:var(--border);background:var(--white);color:var(--ink);font:16px/1.4 ui-monospace,Menlo,Consolas,monospace;outline:none}
+input:focus{box-shadow:var(--shadow-sm);transform:translate(-2px,-2px)}
+button{font:inherit;border:var(--border);cursor:pointer;background:var(--ink);color:var(--white);padding:10px 14px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+button:active{transform:translate(2px,2px)}
+button.ok{background:var(--green);color:var(--ink)}
+button.no{background:var(--red);color:var(--ink)}
+button.ghost{background:var(--white);color:var(--ink);box-shadow:3px 3px 0 var(--ink)}
+button:disabled{background:#d9d3c6;color:#5b574e;cursor:progress}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+h2{margin:0;font:900 clamp(17px,4vw,22px)/1 "Arial Black",Arial,sans-serif;text-transform:uppercase}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 18px}
+.tab{padding:6px 10px;border:2px solid var(--ink);background:var(--white);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;cursor:pointer}
+.tab.active{background:var(--yellow);box-shadow:2px 2px 0 var(--ink)}
+.order{border:var(--border);box-shadow:var(--shadow-sm);padding:14px;margin-bottom:16px;background:var(--white)}
+.order-top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.order h3{margin:0 0 3px;font:900 18px/1.2 "Arial Black",Arial,sans-serif;word-break:break-word}
+.order .url{font-size:11.5px;word-break:break-all;color:#4b473f}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border:2px solid var(--ink);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--paper);white-space:nowrap}
+.badge.pending{background:var(--yellow)}
+.badge.submitted{background:var(--cyan)}
+.badge.approved{background:var(--green)}
+.badge.rejected{background:var(--red)}
+.meta{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0;font-size:12px}
+.meta b{font-size:18px;display:block;font-family:"Arial Black",Arial,sans-serif;letter-spacing:-.02em}
+.note{border:2px dashed rgba(17,17,17,.35);padding:8px 10px;font-size:12.5px;background:#fffbe8;margin:10px 0;white-space:pre-wrap;word-break:break-word}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.proof{margin-top:12px}
+.proof img{max-width:100%;max-height:420px;border:var(--border);box-shadow:var(--shadow-sm);display:block;margin-top:10px}
+.msg{padding:10px 12px;border:var(--border);font-weight:700;font-size:12.5px;margin:12px 0 0}
+.msg.err{background:var(--red)}
+.msg.info{background:var(--cyan)}
+[hidden]{display:none!important}
+.empty{border:2px dashed var(--ink);padding:18px;text-align:center;font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
+footer{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#4b473f;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <span class="kicker">Internal</span>
+      <h1>Verifikasi Pembayaran</h1>
+    </div>
+    <button class="ghost" id="logout" hidden>Keluar</button>
+  </header>
+
+  <section class="card" id="login-card">
+    <label for="token">Token admin</label>
+    <input id="token" type="password" autocomplete="current-password" placeholder="ADMIN_TOKEN" spellcheck="false">
+    <div class="actions">
+      <button id="login">Masuk</button>
+    </div>
+    <p class="msg err" id="login-error" hidden></p>
+    <p class="msg info" id="login-info" hidden>Token disimpan hanya di sesi tab ini.</p>
+  </section>
+
+  <section class="card" id="panel" hidden>
+    <div class="row">
+      <h2>Order tanpa iklan</h2>
+      <button class="ghost" id="refresh">Muat ulang</button>
+    </div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-filter="submitted">Menunggu verifikasi</button>
+      <button class="tab" data-filter="pending">Belum bayar</button>
+      <button class="tab" data-filter="approved">Disetujui</button>
+      <button class="tab" data-filter="rejected">Ditolak</button>
+      <button class="tab" data-filter="all">Semua</button>
+    </div>
+    <p class="msg info" id="status-msg" hidden></p>
+    <p class="msg err" id="error-msg" hidden></p>
+    <div id="orders"><div class="empty">Memuat…</div></div>
+  </section>
+
+  <footer>Halaman ini tidak diindeks. Jangan bagikan token admin.</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TOKEN_KEY = 'appbuilder.adminToken';
+  var loginCard = document.getElementById('login-card');
+  var panel = document.getElementById('panel');
+  var tokenInput = document.getElementById('token');
+  var loginBtn = document.getElementById('login');
+  var logoutBtn = document.getElementById('logout');
+  var loginError = document.getElementById('login-error');
+  var refreshBtn = document.getElementById('refresh');
+  var ordersEl = document.getElementById('orders');
+  var statusMsg = document.getElementById('status-msg');
+  var errorMsg = document.getElementById('error-msg');
+  var tabs = document.getElementById('tabs');
+  var token = '';
+  var orders = [];
+  var filter = 'submitted';
+
+  try { token = sessionStorage.getItem(TOKEN_KEY) || ''; } catch (_) {}
+
+  function show(el, message) {
+    el.textContent = message || '';
+    el.hidden = !message;
+  }
+
+  function rupiah(value) {
+    return 'Rp ' + Number(value || 0).toLocaleString('id-ID');
+  }
+
+  function formatTime(ms) {
+    if (!ms) return '-';
+    try {
+      return new Date(ms).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch (_) {
+      return new Date(ms).toISOString();
+    }
+  }
+
+  function api(path, options) {
+    var opts = options || {};
+    opts.headers = Object.assign({}, opts.headers, { 'X-Admin-Token': token });
+    return fetch(path, opts).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok) {
+          if (response.status === 401) {
+            signOut();
+            throw new Error('Token admin salah atau kedaluwarsa.');
+          }
+          throw new Error(data.error || 'Permintaan gagal.');
+        }
+        return data;
+      });
+    });
+  }
+
+  function signOut() {
+    token = '';
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (_) {}
+    panel.hidden = true;
+    loginCard.hidden = false;
+    logoutBtn.hidden = true;
+    tokenInput.value = '';
+  }
+
+  function enter() {
+    loginCard.hidden = true;
+    panel.hidden = false;
+    logoutBtn.hidden = false;
+    show(loginError, '');
+    render();
+  }
+
+  function loadOrders() {
+    show(errorMsg, '');
+    show(statusMsg, 'Memuat order…');
+    api('/api/admin/orders').then(function (data) {
+      orders = data.orders || [];
+      show(statusMsg, '');
+      render();
+    }).catch(function (error) {
+      show(statusMsg, '');
+      show(errorMsg, error.message);
+      ordersEl.textContent = '';
+      var empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Gagal memuat order.';
+      ordersEl.appendChild(empty);
+    });
+  }
+
+  function render() {
+    ordersEl.textContent = '';
+    var visible = orders.filter(function (order) {
+      if (filter === 'all') return true;
+      return order.payment.status === filter;
+    });
+    if (!visible.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = filter === 'submitted' ? 'Tidak ada order menunggu verifikasi.' : 'Tidak ada order.';
+      ordersEl.appendChild(empty);
+      return;
+    }
+    visible.forEach(renderOrder);
+  }
+
+  function renderOrder(order) {
+    var box = document.createElement('article');
+    box.className = 'order';
+
+    var top = document.createElement('div');
+    top.className = 'order-top';
+
+    var info = document.createElement('div');
+    info.style.minWidth = '0';
+    var title = document.createElement('h3');
+    title.textContent = order.name || 'Aplikasi';
+    var url = document.createElement('div');
+    url.className = 'url';
+    url.textContent = order.url;
+    info.appendChild(title);
+    info.appendChild(url);
+
+    var badge = document.createElement('span');
+    badge.className = 'badge ' + order.payment.status;
+    badge.textContent = order.payment.status;
+
+    top.appendChild(info);
+    top.appendChild(badge);
+    box.appendChild(top);
+
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.appendChild(metaItem('Nominal', rupiah(order.payment.amount)));
+    meta.appendChild(metaItem('Status build', order.status));
+    meta.appendChild(metaItem('Dibuat', formatTime(order.createdAt)));
+    meta.appendChild(metaItem('Bukti dikirim', formatTime(order.payment.submittedAt)));
+    box.appendChild(meta);
+
+    if (order.payment.note) {
+      var note = document.createElement('div');
+      note.className = 'note';
+      note.textContent = order.payment.note;
+      box.appendChild(note);
+    }
+
+    if (order.payment.reason) {
+      var reason = document.createElement('div');
+      reason.className = 'note';
+      reason.textContent = 'Alasan ditolak: ' + order.payment.reason;
+      box.appendChild(reason);
+    }
+
+    if (order.proofUrl) {
+      var proof = document.createElement('div');
+      proof.className = 'proof';
+      var toggle = document.createElement('button');
+      toggle.className = 'ghost';
+      toggle.textContent = 'Lihat bukti';
+      toggle.type = 'button';
+      proof.appendChild(toggle);
+      toggle.addEventListener('click', function () {
+        if (proof.querySelector('img')) {
+          var old = proof.querySelector('img');
+          old.remove();
+          toggle.textContent = 'Lihat bukti';
+          return;
+        }
+        toggle.disabled = true;
+        toggle.textContent = 'Memuat…';
+        fetch(order.proofUrl, { headers: { 'X-Admin-Token': token } })
+          .then(function (response) {
+            if (!response.ok) throw new Error('Bukti tidak bisa dimuat.');
+            return response.blob();
+          })
+          .then(function (blob) {
+            var reader = new FileReader();
+            reader.onload = function () {
+              var img = document.createElement('img');
+              img.src = reader.result;
+              img.alt = 'Bukti transfer ' + order.id;
+              proof.appendChild(img);
+              toggle.textContent = 'Tutup bukti';
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(function (error) {
+            show(errorMsg, error.message);
+          })
+          .finally(function () {
+            toggle.disabled = false;
+          });
+      });
+      box.appendChild(proof);
+    }
+
+    if (order.payment.status === 'submitted') {
+      var actions = document.createElement('div');
+      actions.className = 'actions';
+
+      var approve = document.createElement('button');
+      approve.className = 'ok';
+      approve.type = 'button';
+      approve.textContent = 'Setujui & antrikan';
+      approve.addEventListener('click', function () {
+        if (!confirm('Setujui pembayaran ' + rupiah(order.payment.amount) + ' untuk ' + (order.name || order.id) + '?')) return;
+        approve.disabled = true;
+        api('/api/admin/orders/' + order.id + '/approve', { method: 'POST' })
+          .then(function () {
+            show(statusMsg, 'Order ' + order.id + ' disetujui dan masuk antrian.');
+            loadOrders();
+          })
+          .catch(function (error) {
+            show(errorMsg, error.message);
+            approve.disabled = false;
+          });
+      });
+
+      var reject = document.createElement('button');
+      reject.className = 'no';
+      reject.type = 'button';
+      reject.textContent = 'Tolak';
+      reject.addEventListener('click', function () {
+        var reason = prompt('Alasan penolakan (dikirim ke pengguna):', 'Nominal tidak cocok.');
+        if (reason === null) return;
+        reject.disabled = true;
+        api('/api/admin/orders/' + order.id + '/reject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason.trim() || 'Nominal tidak cocok.' })
+        }).then(function () {
+          show(statusMsg, 'Order ' + order.id + ' ditolak.');
+          loadOrders();
+        }).catch(function (error) {
+          show(errorMsg, error.message);
+          reject.disabled = false;
+        });
+      });
+
+      actions.appendChild(approve);
+      actions.appendChild(reject);
+      box.appendChild(actions);
+    }
+
+    ordersEl.appendChild(box);
+  }
+
+  function metaItem(label, value) {
+    var item = document.createElement('div');
+    var b = document.createElement('b');
+    b.textContent = value;
+    item.appendChild(b);
+    item.appendChild(document.createTextNode(label));
+    return item;
+  }
+
+  loginBtn.addEventListener('click', function () {
+    var value = tokenInput.value.trim();
+    if (!value) {
+      show(loginError, 'Masukkan token admin.');
+      return;
+    }
+    token = value;
+    loginBtn.disabled = true;
+    api('/api/admin/orders').then(function (data) {
+      try { sessionStorage.setItem(TOKEN_KEY, token); } catch (_) {}
+      orders = data.orders || [];
+      enter();
+    }).catch(function (error) {
+      show(loginError, error.message);
+    }).finally(function () {
+      loginBtn.disabled = false;
+    });
+  });
+
+  tokenInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') loginBtn.click();
+  });
+
+  logoutBtn.addEventListener('click', signOut);
+  refreshBtn.addEventListener('click', loadOrders);
+
+  tabs.addEventListener('click', function (event) {
+    var button = event.target.closest('.tab');
+    if (!button) return;
+    filter = button.dataset.filter;
+    Array.prototype.forEach.call(tabs.querySelectorAll('.tab'), function (tab) {
+      tab.classList.toggle('active', tab === button);
+    });
+    render();
+  });
+
+  if (token) {
+    api('/api/admin/orders').then(function (data) {
+      orders = data.orders || [];
+      enter();
+    }).catch(function () {
+      signOut();
+    });
+  }
+})();
+</script>
+</body>
+</html>

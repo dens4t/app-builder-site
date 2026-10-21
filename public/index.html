@@ -159,6 +159,42 @@ button{font:inherit;border:var(--border);cursor:pointer;background:var(--ink);co
 }
 footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11.5px;line-height:1.6;text-transform:uppercase;letter-spacing:.04em}
 .muted{color:#4b473f}
+.ads{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  border:var(--border);background:var(--cyan);box-shadow:var(--shadow-sm);
+  padding:10px 12px;margin:0 0 clamp(16px,3vw,24px);font-size:12px;font-weight:700;
+}
+.ad-tag{
+  font:900 10px/1 "Arial Black",Arial,sans-serif;background:var(--ink);color:var(--yellow);
+  padding:4px 7px;letter-spacing:.14em;flex:none;
+}
+.ads .ad-link{margin-left:auto;color:var(--ink);font-weight:900;text-transform:uppercase;font-size:11px;letter-spacing:.06em;border-bottom:3px solid var(--ink);text-decoration:none;white-space:nowrap}
+.ads .ad-link:hover{background:var(--yellow)}
+.toggle{
+  display:flex;gap:12px;align-items:flex-start;border:var(--border);background:#fffbe8;
+  padding:12px 14px;box-shadow:var(--shadow-sm);cursor:pointer;margin:0 0 18px;
+}
+.toggle input{width:22px;height:22px;flex:none;margin:1px 0 0;accent-color:var(--ink);cursor:pointer}
+.toggle .tt{display:block;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+.toggle .ts{display:block;font-weight:400;font-size:11.5px;line-height:1.5;color:#4b473f;margin-top:3px}
+.chip.awaiting_payment,.chip.payment_review{background:var(--yellow)}
+.chip.payment_rejected{background:var(--red)}
+.dot.awaiting_payment,.dot.payment_review{background:var(--yellow)}
+.dot.payment_rejected{background:var(--red)}
+.amount{
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:var(--border);
+  background:var(--paper);padding:10px 12px;margin:12px 0 0;
+  font:900 clamp(18px,4vw,22px)/1 "Arial Black",Arial,sans-serif;letter-spacing:-.01em;
+}
+.qr{display:grid;place-items:center;border:var(--border);background:var(--white);padding:12px;box-shadow:var(--shadow-sm);margin:14px 0 0}
+.qr img{width:min(280px,100%);height:auto;display:block}
+textarea{
+  width:100%;padding:12px 14px;border:var(--border);background:var(--white);color:var(--ink);
+  font:16px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;outline:none;resize:vertical;min-height:74px;
+}
+textarea:focus{box-shadow:var(--shadow-sm);transform:translate(-2px,-2px)}
+.pay-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.pay-actions .ghost{padding:12px 16px;font-size:12.5px}
 [hidden]{display:none!important}
 @media (max-width:520px){
   :root{--shadow:5px 5px 0 var(--ink);--shadow-sm:3px 3px 0 var(--ink)}
@@ -180,6 +216,12 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
       <p class="tagline">Tempel satu URL. Dapatkan aplikasi Android. Dikompilasi oleh GitHub Actions, bukan template setengah jadi.</p>
     </div>
   </header>
+
+  <aside class="ads" id="site-ad">
+    <span class="ad-tag">IKLAN</span>
+    <span id="ad-text">Slot iklan sponsor.</span>
+    <a class="ad-link" id="ad-link" href="#" target="_blank" rel="noopener" hidden>Kunjungi</a>
+  </aside>
 
   <main>
     <section class="card" aria-labelledby="step1">
@@ -204,6 +246,13 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
           </label>
           <button type="button" class="ghost" id="icon-clear" hidden style="margin-top:10px">Hapus ikon</button>
         </div>
+        <label class="toggle" for="noads">
+          <input type="checkbox" id="noads">
+          <span>
+            <span class="tt">Tanpa iklan — <span id="price-label">Rp 5.000</span></span>
+            <span class="ts">Bayar sekali per build. Iklan di APK dan di situs ini dinonaktifkan setelah pembayaran diverifikasi admin. Tanpa centang, build gratis dengan banner iklan.</span>
+          </span>
+        </label>
         <button id="submit" type="submit">
           <span class="spinner" id="spin" hidden></span>
           <span id="submit-label">Build sekarang</span>
@@ -227,6 +276,35 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
         </div>
       </div>
       <div class="status-body" id="status-body"></div>
+    </section>
+
+    <section class="card" id="pay-card" hidden aria-labelledby="pay-title">
+      <div class="card-head"><span class="num">Rp</span><h2 id="pay-title">Pembayaran QRIS</h2></div>
+      <div id="pay-intro">
+        <p style="margin:0 0 4px">Build tanpa iklan dikunci sampai pembayaran diverifikasi. Transfer <strong>tepat</strong> sebesar nominal di bawah ini — angka unik dipakai admin untuk mencocokkan order.</p>
+        <div class="amount">
+          <span id="pay-amount">Rp 5.000</span>
+          <button class="ghost" type="button" id="pay-copy">Salin nominal</button>
+        </div>
+        <div class="qr"><img id="pay-qris" src="/qris-placeholder.svg" alt="QRIS pembayaran"></div>
+        <p class="hint" id="pay-qris-warn" hidden>QRIS asli belum dipasang admin. Hubungi admin sebelum membayar.</p>
+        <p class="hint">Sudah bayar? Unggah screenshot bukti (opsional) dan/atau tulis catatan, lalu kirim untuk diverifikasi.</p>
+      </div>
+      <div class="status-body" id="pay-status"></div>
+      <div id="pay-form">
+        <div class="field">
+          <label for="pay-proof">Bukti transfer <span class="muted">— opsional</span></label>
+          <input id="pay-proof" type="file" accept="image/png,image/jpeg,image/webp">
+        </div>
+        <div class="field">
+          <label for="pay-note">Catatan <span class="muted">— opsional</span></label>
+          <textarea id="pay-note" maxlength="300" placeholder="Nama pengirim / waktu transfer"></textarea>
+        </div>
+        <div class="pay-actions">
+          <button class="ghost" type="button" id="pay-submit">Kirim bukti bayar</button>
+        </div>
+        <p class="error" id="pay-error" hidden></p>
+      </div>
     </section>
 
     <section class="card" aria-labelledby="step3">
@@ -270,6 +348,24 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
   var iconPlus = document.getElementById('icon-plus');
   var iconClear = document.getElementById('icon-clear');
   var jobIcon = document.getElementById('job-icon');
+  var noAdsInput = document.getElementById('noads');
+  var priceLabel = document.getElementById('price-label');
+  var siteAd = document.getElementById('site-ad');
+  var adText = document.getElementById('ad-text');
+  var adLink = document.getElementById('ad-link');
+  var payCard = document.getElementById('pay-card');
+  var payAmount = document.getElementById('pay-amount');
+  var payQris = document.getElementById('pay-qris');
+  var payQrisWarn = document.getElementById('pay-qris-warn');
+  var payStatus = document.getElementById('pay-status');
+  var payForm = document.getElementById('pay-form');
+  var payProof = document.getElementById('pay-proof');
+  var payNote = document.getElementById('pay-note');
+  var paySubmit = document.getElementById('pay-submit');
+  var payCopy = document.getElementById('pay-copy');
+  var payError = document.getElementById('pay-error');
+  var config = { price: 5000, qrisImage: '/qris-placeholder.svg', qrisConfigured: false, adText: '', adUrl: '' };
+  var currentPayment = null;
   var iconData = null;
   var currentId = null;
   var timer = null;
@@ -284,10 +380,50 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
     });
   }
 
+  function rupiah(value) {
+    return 'Rp ' + Number(value || 0).toLocaleString('id-ID');
+  }
+
+  function applyNoAdsUntil() {
+    var until = 0;
+    try { until = Number(localStorage.getItem('appbuilder.noadsUntil') || 0); } catch (_) {}
+    if (until > Date.now()) siteAd.hidden = true;
+  }
+
+  function markNoAds() {
+    try { localStorage.setItem('appbuilder.noadsUntil', String(Date.now() + 30 * 86400000)); } catch (_) {}
+    siteAd.hidden = true;
+  }
+
+  function updateSubmitLabel() {
+    submitLabel.textContent = noAdsInput.checked
+      ? 'Order tanpa iklan — ' + rupiah(config.price)
+      : 'Build sekarang';
+  }
+
   function setBusy(busy) {
     submit.disabled = busy;
     spin.hidden = !busy;
-    submitLabel.textContent = busy ? 'Mengirim…' : 'Build sekarang';
+    if (busy) {
+      submitLabel.textContent = 'Mengirim…';
+    } else {
+      updateSubmitLabel();
+    }
+  }
+
+  function loadConfig() {
+    api('/api/config').then(function (data) {
+      config = data;
+      priceLabel.textContent = rupiah(config.price);
+      payQris.src = config.qrisImage || '/qris-placeholder.svg';
+      payQrisWarn.hidden = Boolean(config.qrisConfigured);
+      if (config.adText) adText.textContent = config.adText;
+      if (config.adUrl) {
+        adLink.href = config.adUrl;
+        adLink.hidden = false;
+      }
+      updateSubmitLabel();
+    }).catch(function () {});
   }
 
   function showError(message) {
@@ -362,6 +498,9 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
   });
 
   function label(status) {
+    if (status === 'awaiting_payment') return 'Menunggu pembayaran';
+    if (status === 'payment_review') return 'Verifikasi pembayaran';
+    if (status === 'payment_rejected') return 'Pembayaran ditolak';
     if (status === 'queued') return 'Dalam antrian';
     if (status === 'building') return 'Sedang dibangun';
     if (status === 'done') return 'Selesai';
@@ -383,6 +522,43 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
     return Math.floor(diff / 86400000) + ' hari lalu';
   }
 
+  function payMessage(text) {
+    payStatus.textContent = '';
+    var p = document.createElement('p');
+    p.textContent = text;
+    payStatus.appendChild(p);
+  }
+
+  function renderPayment(job) {
+    currentPayment = job.payment || null;
+    if (!job.noAds || !currentPayment) {
+      payCard.hidden = true;
+      return;
+    }
+    payCard.hidden = false;
+    payAmount.textContent = rupiah(currentPayment.amount);
+    payError.hidden = true;
+    var state = currentPayment.status;
+
+    if (state === 'pending') {
+      payForm.hidden = false;
+      payMessage('Status: menunggu pembayaran. Transfer tepat ' + rupiah(currentPayment.amount) + '.');
+    } else if (state === 'submitted') {
+      payForm.hidden = true;
+      payMessage('Bukti pembayaran diterima ' +
+        (currentPayment.submittedAt ? formatTime(currentPayment.submittedAt) : '') +
+        '. Menunggu verifikasi admin.');
+    } else if (state === 'rejected') {
+      payForm.hidden = false;
+      payMessage('Pembayaran ditolak: ' + (currentPayment.reason || 'nominal tidak cocok') +
+        ' Silakan kirim ulang bukti.');
+    } else if (state === 'approved') {
+      payForm.hidden = true;
+      payMessage('Pembayaran terverifikasi. Build tanpa iklan sudah masuk antrian.');
+      markNoAds();
+    }
+  }
+
   function renderJob(job) {
     statusCard.hidden = false;
     statusChip.className = 'chip ' + job.status;
@@ -397,6 +573,8 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
       jobIcon.removeAttribute('src');
     }
 
+    renderPayment(job);
+
     var eta = '';
     if (job.status === 'queued') {
       eta = 'Posisi ' + job.position + ' / ' + formatEta(job.etaSeconds);
@@ -408,7 +586,21 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
     statusEta.textContent = eta;
 
     statusBody.textContent = '';
-    if (job.status === 'queued') {
+    if (job.status === 'awaiting_payment') {
+      var pPay = document.createElement('p');
+      pPay.textContent = 'Build belum masuk antrian. Selesaikan pembayaran QRIS di panel bawah, lalu kirim bukti.';
+      statusBody.appendChild(pPay);
+    } else if (job.status === 'payment_review') {
+      var pReview = document.createElement('p');
+      pReview.textContent = 'Bukti pembayaran sedang diperiksa admin. Build otomatis masuk antrian setelah disetujui.';
+      statusBody.appendChild(pReview);
+    } else if (job.status === 'payment_rejected') {
+      var pReject = document.createElement('p');
+      pReject.textContent = 'Pembayaran ditolak. ' +
+        (job.payment && job.payment.reason ? job.payment.reason : 'Periksa nominal dan bukti transfer.') +
+        ' Kirim ulang bukti di panel bawah.';
+      statusBody.appendChild(pReject);
+    } else if (job.status === 'queued') {
       var p1 = document.createElement('p');
       p1.textContent = 'Menunggu giliran. Halaman ini menyegarkan sendiri.';
       statusBody.appendChild(p1);
@@ -523,6 +715,100 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
     });
   }
 
+  function fileToProof(file, done, fail) {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      return fail('Format bukti harus PNG, JPG, atau WebP.');
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      return fail('Ukuran file maksimal 8 MB.');
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var image = new Image();
+      image.onload = function () {
+        try {
+          var limit = 1400;
+          var scale = Math.min(1, limit / Math.max(image.width, image.height));
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.width * scale));
+          canvas.height = Math.max(1, Math.round(image.height * scale));
+          var context = canvas.getContext('2d');
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          var data = canvas.toDataURL('image/jpeg', 0.85);
+          if (data.length > 1450 * 1024) {
+            return fail('Bukti masih terlalu besar setelah dikompres. Potong screenshot ke bagian penting saja.');
+          }
+          done(data);
+        } catch (_) {
+          fail('Gagal memproses bukti.');
+        }
+      };
+      image.onerror = function () { fail('Gagal membaca file bukti.'); };
+      image.src = reader.result;
+    };
+    reader.onerror = function () { fail('Gagal membaca file bukti.'); };
+    reader.readAsDataURL(file);
+  }
+
+  paySubmit.addEventListener('click', function () {
+    if (!currentId) return;
+    payError.hidden = true;
+    var file = payProof.files && payProof.files[0];
+    var note = payNote.value.trim();
+    if (!file && !note) {
+      payError.textContent = 'Sertakan screenshot atau catatan pembayaran.';
+      payError.hidden = false;
+      return;
+    }
+
+    function send(proof) {
+      var original = paySubmit.textContent;
+      paySubmit.disabled = true;
+      paySubmit.textContent = 'Mengirim…';
+      api('/api/jobs/' + currentId + '/proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proof: proof, note: note })
+      }).then(function (data) {
+        payProof.value = '';
+        renderJob(data.job);
+        loadRecent();
+        payStatus.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }).catch(function (error) {
+        payError.textContent = error.message;
+        payError.hidden = false;
+      }).finally(function () {
+        paySubmit.disabled = false;
+        paySubmit.textContent = original;
+      });
+    }
+
+    if (file) {
+      fileToProof(file, send, function (message) {
+        payError.textContent = message;
+        payError.hidden = false;
+      });
+    } else {
+      send(null);
+    }
+  });
+
+  payCopy.addEventListener('click', function () {
+    if (!currentPayment) return;
+    var text = String(currentPayment.amount);
+    function done() {
+      payCopy.textContent = 'Tersalin';
+      setTimeout(function () { payCopy.textContent = 'Salin nominal'; }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {});
+    }
+  });
+
+  noAdsInput.addEventListener('change', updateSubmitLabel);
+
   form.addEventListener('submit', function (event) {
     event.preventDefault();
     showError('');
@@ -530,7 +816,12 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
     api('/api/jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: urlInput.value.trim(), name: nameInput.value.trim(), icon: iconData })
+      body: JSON.stringify({
+        url: urlInput.value.trim(),
+        name: nameInput.value.trim(),
+        icon: iconData,
+        noAds: noAdsInput.checked
+      })
     }).then(function (data) {
       currentId = data.job.id;
       try { localStorage.setItem(STORAGE_KEY, currentId); } catch (_) {}
@@ -538,6 +829,9 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
       resetIcon();
       startPolling();
       loadRecent();
+      if (data.job.noAds) {
+        payCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }).catch(function (error) {
       showError(error.message);
     }).finally(function () {
@@ -547,6 +841,9 @@ footer{margin:30px 0 10px;padding-top:14px;border-top:var(--border);font-size:11
 
   document.getElementById('refresh').addEventListener('click', loadRecent);
 
+  applyNoAdsUntil();
+  loadConfig();
+  updateSubmitLabel();
   loadRecent();
   if (currentId) {
     api('/api/jobs/' + currentId).then(function (data) {

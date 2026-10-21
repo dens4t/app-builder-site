@@ -15,16 +15,29 @@ const MAX_QUEUE = Number(process.env.MAX_QUEUE || 8);
 const RATE_LIMIT = Number(process.env.RATE_LIMIT || 5);
 const BUILD_TIMEOUT_MS = Number(process.env.BUILD_TIMEOUT_MS || 20 * 60 * 1000);
 const TICK_MS = 6000;
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const PRICE_IDR = Number(process.env.PRICE_IDR || 5000);
+const QRIS_IMAGE = process.env.QRIS_IMAGE || '/qris-placeholder.svg';
+const AD_TEXT = process.env.AD_TEXT || 'Slot iklan sponsor. Hubungi admin untuk memasang iklan di sini.';
+const AD_URL = process.env.AD_URL || '';
+const PROOF_MAX_ATTEMPTS = 5;
 
 const DATA_DIR = path.join(__dirname, 'data');
 const JOBS_FILE = path.join(DATA_DIR, 'jobs.json');
 const ICONS_DIR = path.join(DATA_DIR, 'icons');
-const INDEX_FILE = path.join(__dirname, 'public', 'index.html');
+const PROOFS_DIR = path.join(DATA_DIR, 'proofs');
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
+const ADMIN_FILE = path.join(PUBLIC_DIR, 'admin.html');
 const ICON_MAX_BYTES = 700 * 1024;
+const PROOF_MAX_BYTES = 1500 * 1024;
 const BODY_MAX_BYTES = 2 * 1024 * 1024;
+const PROOF_BODY_MAX_BYTES = 6 * 1024 * 1024;
+const PAYMENT_STATES = ['awaiting_payment', 'payment_review', 'payment_rejected'];
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(ICONS_DIR, { recursive: true });
+fs.mkdirSync(PROOFS_DIR, { recursive: true });
 
 let jobs = loadJobs();
 let ticking = false;
@@ -99,18 +112,17 @@ function slugify(raw) {
   return slug || 'app';
 }
 
-function decodeIcon(dataUrl) {
+function decodeImage(dataUrl, maxBytes) {
   if (typeof dataUrl !== 'string' || !dataUrl) return null;
   const match = /^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
   if (!match) return null;
-  let mime = match[1] === 'jpg' ? 'jpeg' : match[1];
   let buffer;
   try {
     buffer = Buffer.from(match[2], 'base64');
   } catch (_) {
     return null;
   }
-  if (buffer.length < 16 || buffer.length > ICON_MAX_BYTES) return null;
+  if (buffer.length < 16 || buffer.length > maxBytes) return null;
 
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
     return { buffer, ext: 'png', mime: 'image/png' };
@@ -125,6 +137,58 @@ function decodeIcon(dataUrl) {
     return { buffer, ext: 'webp', mime: 'image/webp' };
   }
   return null;
+}
+
+function decodeIcon(dataUrl) {
+  return decodeImage(dataUrl, ICON_MAX_BYTES);
+}
+
+function newPayment() {
+  const used = new Set(
+    jobs
+      .filter(job =>
+        job.payment &&
+        (job.payment.status === 'pending' || job.payment.status === 'submitted') &&
+        job.createdAt > Date.now() - 24 * 60 * 60 * 1000
+      )
+      .map(job => job.payment.amount)
+  );
+  let code;
+  do {
+    code = 1 + crypto.randomInt(998);
+  } while (used.has(PRICE_IDR + code));
+  return {
+    status: 'pending',
+    amount: PRICE_IDR + code,
+    code,
+    submittedAt: null,
+    approvedAt: null,
+    note: '',
+    proofFile: null,
+    reason: null,
+    attempts: 0
+  };
+}
+
+function isAdmin(req) {
+  if (!ADMIN_TOKEN) return false;
+  const provided = String(req.headers['x-admin-token'] || '');
+  const expected = Buffer.from(ADMIN_TOKEN);
+  const actual = Buffer.from(provided);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function publicPayment(job) {
+  if (!job.payment) return null;
+  return {
+    status: job.payment.status,
+    amount: job.payment.amount,
+    code: job.payment.code,
+    submittedAt: job.payment.submittedAt || null,
+    approvedAt: job.payment.approvedAt || null,
+    note: job.payment.note || '',
+    reason: job.payment.reason || null
+  };
 }
 
 function queueIndex(job) {
@@ -153,6 +217,8 @@ function publicJob(job) {
     apkUrl: job.apkUrl || null,
     runUrl: job.runUrl || null,
     iconUrl: job.iconUrl || null,
+    noAds: Boolean(job.noAds),
+    payment: publicPayment(job),
     error: job.error || null,
     position,
     etaSeconds
@@ -192,7 +258,9 @@ async function dispatch(job) {
         url: job.url,
         name: job.name,
         slug: job.slug || slugify(job.name),
-        icon_url: job.iconUrl || ''
+        icon_url: job.iconUrl || '',
+        ads: job.noAds ? '0' : '1',
+        ad_url: PUBLIC_BASE_URL
       }
     })
   });
@@ -310,13 +378,13 @@ function json(res, status, body, extraHeaders = {}) {
   res.end(payload);
 }
 
-function readBody(req) {
+function readBody(req, limit = BODY_MAX_BYTES) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', chunk => {
       size += chunk.length;
-      if (size > BODY_MAX_BYTES) {
+      if (size > limit) {
         reject(new Error('body too large'));
         req.destroy();
         return;
@@ -356,11 +424,119 @@ async function handleApi(req, res, pathname) {
     }
   }
 
+  if (req.method === 'GET' && pathname === '/api/config') {
+    return json(res, 200, {
+      price: PRICE_IDR,
+      qrisImage: QRIS_IMAGE,
+      qrisConfigured: QRIS_IMAGE !== '/qris-placeholder.svg',
+      adText: AD_TEXT,
+      adUrl: AD_URL,
+      adminEnabled: Boolean(ADMIN_TOKEN)
+    });
+  }
+
+  if (pathname.startsWith('/api/admin/')) {
+    if (!ADMIN_TOKEN) {
+      return json(res, 503, { error: 'Admin belum dikonfigurasi (ADMIN_TOKEN kosong).' });
+    }
+    if (!isAdmin(req)) {
+      return json(res, 401, { error: 'Token admin salah.' });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/admin/orders') {
+      const orders = jobs
+        .filter(job => job.noAds && job.payment)
+        .sort((a, b) => (b.payment.submittedAt || b.createdAt) - (a.payment.submittedAt || a.createdAt))
+        .slice(0, 60)
+        .map(job => ({
+          id: job.id,
+          name: job.name,
+          url: job.url,
+          status: job.status,
+          createdAt: job.createdAt,
+          payment: {
+            status: job.payment.status,
+            amount: job.payment.amount,
+            code: job.payment.code,
+            note: job.payment.note || '',
+            submittedAt: job.payment.submittedAt || null,
+            approvedAt: job.payment.approvedAt || null,
+            reason: job.payment.reason || null,
+            attempts: job.payment.attempts || 0
+          },
+          proofUrl: job.payment.proofFile ? `/api/admin/proofs/${job.payment.proofFile}` : null,
+          apkUrl: job.apkUrl || null
+        }));
+      return json(res, 200, { orders });
+    }
+
+    const adminProof = pathname.match(/^\/api\/admin\/proofs\/([a-z0-9-]+\.(?:png|jpg|webp))$/);
+    if (req.method === 'GET' && adminProof) {
+      const fileName = adminProof[1];
+      try {
+        const data = fs.readFileSync(path.join(PROOFS_DIR, fileName));
+        const mime = fileName.endsWith('.png')
+          ? 'image/png'
+          : fileName.endsWith('.jpg') ? 'image/jpeg' : 'image/webp';
+        res.writeHead(200, {
+          'Content-Type': mime,
+          'Content-Length': data.length,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff'
+        });
+        return res.end(data);
+      } catch (_) {
+        return json(res, 404, { error: 'Bukti tidak ditemukan.' });
+      }
+    }
+
+    const adminOrder = pathname.match(/^\/api\/admin\/orders\/([a-z0-9]+)\/(approve|reject)$/);
+    if (req.method === 'POST' && adminOrder) {
+      const job = jobs.find(item => item.id === adminOrder[1]);
+      if (!job || !job.payment) {
+        return json(res, 404, { error: 'Order tidak ditemukan.' });
+      }
+      if (adminOrder[2] === 'approve') {
+        if (job.payment.status !== 'submitted') {
+          return json(res, 409, { error: 'Order belum dalam status menunggu verifikasi.' });
+        }
+        job.payment.status = 'approved';
+        job.payment.approvedAt = Date.now();
+        job.payment.reason = null;
+        job.status = 'queued';
+        job.error = null;
+        saveJobs();
+        console.log('payment approved', job.id);
+        setImmediate(tick);
+        return json(res, 200, { job: publicJob(job) });
+      }
+
+      let body = {};
+      try {
+        body = await readBody(req);
+      } catch (_) {
+      }
+      const reason = String(body.reason || '')
+        .replace(/[\x00-\x1f\x7f<>]/g, '')
+        .trim()
+        .slice(0, 200) || 'Pembayaran tidak ditemukan.';
+      job.payment.status = 'rejected';
+      job.payment.reason = reason;
+      job.status = 'payment_rejected';
+      saveJobs();
+      console.log('payment rejected', job.id);
+      return json(res, 200, { job: publicJob(job) });
+    }
+
+    return json(res, 404, { error: 'Admin route tidak ditemukan.' });
+  }
+
   if (req.method === 'GET' && pathname === '/api/health') {
     return json(res, 200, {
       ok: true,
       building: jobs.some(job => job.status === 'building'),
-      queued: jobs.filter(job => job.status === 'queued').length
+      queued: jobs.filter(job => job.status === 'queued').length,
+      awaitingPayment: jobs.filter(job => PAYMENT_STATES.includes(job.status)).length
     });
   }
 
@@ -386,6 +562,71 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && match) {
     const job = jobs.find(item => item.id === match[1]);
     if (!job) return json(res, 404, { error: 'Job tidak ditemukan.' });
+    return json(res, 200, { job: publicJob(job) });
+  }
+
+  const proofRoute = pathname.match(/^\/api\/jobs\/([a-z0-9]+)\/proof$/);
+  if (req.method === 'POST' && proofRoute) {
+    const job = jobs.find(item => item.id === proofRoute[1]);
+    if (!job) return json(res, 404, { error: 'Job tidak ditemukan.' });
+    if (!job.payment) return json(res, 400, { error: 'Job ini tidak memerlukan pembayaran.' });
+    if (!['pending', 'submitted', 'rejected'].includes(job.payment.status)) {
+      return json(res, 409, { error: 'Pembayaran sudah diproses.' });
+    }
+    if ((job.payment.attempts || 0) >= PROOF_MAX_ATTEMPTS) {
+      return json(res, 429, { error: 'Terlalu banyak pengiriman bukti. Hubungi admin.' });
+    }
+
+    let body;
+    try {
+      body = await readBody(req, PROOF_BODY_MAX_BYTES);
+    } catch (error) {
+      return json(res, 400, {
+        error: error.message === 'body too large'
+          ? 'Bukti terlalu besar. Maksimal 1,5 MB.'
+          : 'JSON tidak valid.'
+      });
+    }
+
+    const note = String(body.note || '')
+      .replace(/[\x00-\x1f\x7f<>]/g, '')
+      .trim()
+      .slice(0, 300);
+
+    let proof = null;
+    if (body.proof) {
+      proof = decodeImage(body.proof, PROOF_MAX_BYTES);
+      if (!proof) {
+        return json(res, 400, { error: 'Bukti tidak valid. Gunakan PNG, JPG, atau WebP maksimal 1,5 MB.' });
+      }
+    }
+
+    if (!proof && !note && !job.payment.proofFile) {
+      return json(res, 400, { error: 'Sertakan bukti transfer atau catatan pembayaran.' });
+    }
+
+    if (job.payment.proofFile) {
+      try {
+        fs.unlinkSync(path.join(PROOFS_DIR, job.payment.proofFile));
+      } catch (_) {
+      }
+      job.payment.proofFile = null;
+    }
+
+    if (proof) {
+      const fileName = `${job.id}-${Date.now()}.${proof.ext}`;
+      fs.writeFileSync(path.join(PROOFS_DIR, fileName), proof.buffer, { mode: 0o600 });
+      job.payment.proofFile = fileName;
+    }
+
+    job.payment.note = note;
+    job.payment.status = 'submitted';
+    job.payment.submittedAt = Date.now();
+    job.payment.reason = null;
+    job.payment.attempts = (job.payment.attempts || 0) + 1;
+    job.status = 'payment_review';
+    saveJobs();
+    console.log('proof submitted', job.id);
     return json(res, 200, { job: publicJob(job) });
   }
 
@@ -422,12 +663,15 @@ async function handleApi(req, res, pathname) {
     }
 
     const id = newId();
+    const noAds = body.noAds === true;
     const job = {
       id,
       url,
       name,
       slug: slugify(name),
-      status: 'queued',
+      status: noAds ? 'awaiting_payment' : 'queued',
+      noAds,
+      payment: noAds ? newPayment() : null,
       createdAt: Date.now(),
       startedAt: null,
       finishedAt: null,
@@ -448,19 +692,23 @@ async function handleApi(req, res, pathname) {
 
     jobs.push(job);
     saveJobs();
-    console.log('queued', job.id, url);
-    setImmediate(tick);
+    console.log(noAds ? 'awaiting payment' : 'queued', job.id, url);
+    if (!noAds) setImmediate(tick);
     return json(res, 201, { job: publicJob(job) });
   }
 
   return json(res, 405, { error: 'Method not allowed.' });
 }
 
-let indexCache = null;
+const htmlCache = new Map();
 
-function serveIndex(res) {
+function serveHtml(filePath, res) {
   try {
-    if (!indexCache) indexCache = fs.readFileSync(INDEX_FILE);
+    let data = htmlCache.get(filePath);
+    if (!data) {
+      data = fs.readFileSync(filePath);
+      htmlCache.set(filePath, data);
+    }
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=0, must-revalidate',
@@ -469,10 +717,34 @@ function serveIndex(res) {
       'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
       'X-Frame-Options': 'DENY'
     });
-    res.end(indexCache);
+    res.end(data);
   } catch (error) {
-    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('index.html not found');
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Not found');
+  }
+}
+
+function servePublicImage(pathname, res) {
+  const match = pathname.match(/^\/([A-Za-z0-9._-]+\.(?:png|jpg|jpeg|webp|svg))$/);
+  if (!match) return false;
+  const filePath = path.join(PUBLIC_DIR, match[1]);
+  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) return false;
+  try {
+    const data = fs.readFileSync(filePath);
+    const ext = match[1].split('.').pop().toLowerCase();
+    const mime = ext === 'svg'
+      ? 'image/svg+xml'
+      : ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg') ? 'image/jpeg' : 'image/webp';
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Content-Length': data.length,
+      'Cache-Control': 'public, max-age=300',
+      'X-Content-Type-Options': 'nosniff'
+    });
+    res.end(data);
+    return true;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -485,7 +757,13 @@ const server = http.createServer(async (req, res) => {
       return await handleApi(req, res, pathname);
     }
     if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-      return serveIndex(res);
+      return serveHtml(INDEX_FILE, res);
+    }
+    if (req.method === 'GET' && (pathname === '/admin' || pathname === '/admin.html')) {
+      return serveHtml(ADMIN_FILE, res);
+    }
+    if (req.method === 'GET' && servePublicImage(pathname, res)) {
+      return;
     }
     if (req.method === 'GET' && pathname === '/favicon.ico') {
       res.writeHead(204);

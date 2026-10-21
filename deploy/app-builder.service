@@ -1,0 +1,19 @@
+[Unit]
+Description=WebView App Builder
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/app-builder
+EnvironmentFile=/opt/app-builder/.env
+ExecStart=/usr/bin/env node /opt/app-builder/server.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
